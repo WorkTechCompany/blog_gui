@@ -199,7 +199,7 @@ def new_screen(browser, captcha_url, image_name):
             check_screen = handle
     # 输出当前窗口句柄（搜狗）
     browser.switch_to.window(check_screen)
-    check_image = 'D:\\' + str(image_name) + '.png'
+    check_image =str(image_name) + '.png'
     browser.get_screenshot_as_file(check_image)
     img = Image.open(check_image)
     img = img.crop([img.size[0]/4,img.size[1]/4,img.size[0]*3/4,img.size[1]*3/4])
