@@ -1,6 +1,7 @@
 #coding=utf-8
 
 import wx
+import logging
 # 导入wxPython中的通用Button
 
 import xDialog
@@ -18,8 +19,8 @@ class LoginFrame(wx.Frame):
 
         # logo_sys = wx.Image(load_image('fo.jpg'), wx.BITMAP_TYPE_ANY).ConvertToBitmap()
         # logo_sys = wx.StaticBitmap(panel,-1,wx.BitmapFromImage('fo.jpg'))
-        logo_sys = wx.Image("fo.png", wx.BITMAP_TYPE_PNG).ConvertToBitmap()
-        wx.StaticBitmap(panel, -1, logo_sys, pos=(90, 90), size=(100, 100))
+        # logo_sys = wx.Image("fo.png", wx.BITMAP_TYPE_PNG).ConvertToBitmap()
+        # wx.StaticBitmap(panel, -1, logo_sys, pos=(90, 90), size=(100, 100))
 
         logo_title = wx.StaticText(panel, -1, '博客注册工具', pos=(100, 210))
         logo_title.SetForegroundColour('#0a74f7')
@@ -36,7 +37,8 @@ class LoginFrame(wx.Frame):
         dlg.Show()
 
     def loginFunction(self, account, password, member_id):
-        print('接收到用户的输入：', account, password)
+        # print('接收到用户的输入：', account, password)
+        # logging.info('接收到用户的输入：%s, %s' % (account, password))
         self.UpdateUI(1, member_id) #更新UI-Frame
 
 class LoginDialog(xDialog.InputDialog):

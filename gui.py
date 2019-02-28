@@ -14,20 +14,20 @@ from cardcode import CardCode
 import time
 from PIL import Image
 import json
-# import logging
-# from logging.handlers import RotatingFileHandler
+import logging
+from logging.handlers import RotatingFileHandler
 
 flag = False
 
-# log_file = 'log.log'
-# root_logging = logging.getLogger()
-# root_logging.setLevel(logging.INFO)
-# formatter = logging.Formatter('%(asctime)s [%(name)s:%(filename)s:%(lineno)d] [%(levelname)s]- %(message)s')
-# # 文件最大2M
-# rotating_file_log = RotatingFileHandler(log_file, maxBytes=10485760, backupCount=3)
-# rotating_file_log.setLevel(logging.INFO)
-# rotating_file_log.setFormatter(formatter)
-# root_logging.addHandler(rotating_file_log)
+log_file = 'log.log'
+root_logging = logging.getLogger()
+root_logging.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s [%(name)s:%(filename)s:%(lineno)d] [%(levelname)s]- %(message)s')
+# 文件最大2M
+rotating_file_log = RotatingFileHandler(log_file, maxBytes=10485760, backupCount=3, encoding='utf-8')
+rotating_file_log.setLevel(logging.INFO)
+rotating_file_log.setFormatter(formatter)
+root_logging.addHandler(rotating_file_log)
 
 success_user_list = ''
 failed_user_list = ''
@@ -35,12 +35,13 @@ failed_user_list = ''
 def connect_db():
     db = pymysql.connect(host='cd-cdb-nmj4h99o.sql.tencentcdb.com', user='bryant', password='leekobe24', db='blog',
                          port=63625, charset='utf8')
+    logging.info('连接数据库成功！')
     print('连接数据库成功！')
     return db
 
 def open_start_thread(success_info, failed_info, member_id, use_times, status=1):
     executor = ThreadPoolExecutor(max_workers=int(use_times))
-    print(status)
+    logging.info('当前运行状态为：%d 的数据' % int(status))
     # # user_id = get_uuid(32)
     # # mac_site = get_mac_address()
     # print('开启线程')
@@ -54,11 +55,10 @@ def open_start_thread(success_info, failed_info, member_id, use_times, status=1)
     conn.execute(sql)
     blog_list = conn.fetchall()
     for image_name, item in enumerate(blog_list):
-        task = executor.submit(start, success_info, failed_info, item, image_name)
         if flag:
             print('关闭线程')
-            task.cancel()
             return
+        executor.submit(start, success_info, failed_info, item, image_name)
         time.sleep(3)
 
 
@@ -69,32 +69,38 @@ def start(success_info, failed_info, item, image_name):
     # conn.execute(sql)
     # blog_list = conn.fetchall()
     print('开始运行')
+    logging.info('开始运行')
     # print(blog_list)
     # for item in blog_list:
-    print(item)
     user = item[0]
     password = item[1]
     name = item[2]
     sql = "UPDATE blog SET status = -1 WHERE user = %s" % user
     print('修改数据为-1')
+    logging.info('修改数据为-1')
     conn.execute(sql)
     db.commit()
     print(user, password, name, image_name)
+    # logging.info(user, password, name, image_name)
     check = sendmessage(user, password, image_name)
     if check:
         print('成功')
+        logging.info('成功')
         sql = "UPDATE blog SET status = 1 WHERE user = %s" % user
         conn.execute(sql)
         db.commit()
         global success_user_list
         info = user + '----' + password + '----' + name
+        logging.info('成功数据为：%s' % info)
         success_user_list += info + '\n'
     else:
         print('失败')
+        logging.info('失败')
         global failed_user_list
         info = user + '----' + password + '----' + name
         failed_user_list += info + '\n'
         print(failed_user_list)
+        logging.info('失败数据为：%s' % info)
     success_info.SetValue(success_user_list)
     failed_info.SetValue(failed_user_list)
 
@@ -120,6 +126,7 @@ def putSentMessage(phone, message_content, addressee):
         time.sleep(3)
         if '1' in response:
             print(response)
+            logging.info(response)
             return phone
         if '提交失败' in response:
             return -1
@@ -132,9 +139,11 @@ def getSentMessageStatus(phone):
         response = requests.get(getSentMessageStatus).text
         time.sleep(3)
         print(response)
+        logging.info(response)
         if '1' in response:
             flag = False
             print('发送成功')
+            logging.info('发送成功')
             return flag
         if '发送失败' in response:
             return flag
@@ -150,6 +159,7 @@ def get_ip():
 def get_browser(user):
     while True:
         print('获取ip')
+        logging.info('获取ip')
         url = 'https://login.sina.com.cn/signup/signin.php'
 
         chrome_options = Options()
@@ -186,6 +196,7 @@ def get_browser(user):
 
 def new_screen(browser, captcha_url, image_name):
     print('获取验证码截图')
+    logging.info('获取验证码截图')
     js = 'window.open("' + captcha_url[0] + '");'
     browser.execute_script(js)
 
@@ -199,7 +210,7 @@ def new_screen(browser, captcha_url, image_name):
             check_screen = handle
     # 输出当前窗口句柄（搜狗）
     browser.switch_to.window(check_screen)
-    check_image =str(image_name) + '.png'
+    check_image = 'D:\\' + str(image_name) + '.png'
     browser.get_screenshot_as_file(check_image)
     img = Image.open(check_image)
     img = img.crop([img.size[0]/4,img.size[1]/4,img.size[0]*3/4,img.size[1]*3/4])
@@ -208,103 +219,97 @@ def new_screen(browser, captcha_url, image_name):
     # 切换回百度窗口
     browser.switch_to.window(blog_screen)
     print('获取验证码截图成功')
+    logging.info('获取验证码截图成功')
     return bytes(check_image, encoding="utf8")
 
 def sendmessage(user, password, image_name):
-    while True:
-        ip = get_browser(user)
-        print('进入程序')
-        print('当前ip可用')
-        url = 'https://login.sina.com.cn/signup/signin.php'
-
-        chrome_options = Options()
-        # 在Linux需要禁用sandbox
-        chrome_options.add_argument('--no-sandbox')
-        # 谷歌文档提到需要加上这个属性来规避bug
-        # chrome_options.add_argument('--disable-gpu')
-        # 隐藏滚动条, 应对一些特殊页面
-        # chrome_options.add_argument('--hide-scrollbars')
-        # 不加载图片, 提升速度
-        # chrome_options.add_argument('blink-settings=imagesEnabled=false')
-        # https安全问题
-        # chrome_options.add_argument('--ignore-certificate-errors')
-        # chrome_options.add_argument('--headless')
-        # 添加代理
-        # ip = get_ip()
-        chrome_options.add_argument("--proxy-server=http://" + ip)
-        # 随机user_agent
-        user_agent = random.choice(constants.USER_AGENTS)
-        chrome_options.add_argument('user-agent=%s' % user_agent)
-        # logging.info("opening chrome, catalog_url:%s", catalog_url)
-
-        browser = webdriver.Chrome(chrome_options=chrome_options)
-        # browser.set_page_load_timeout(60)
-        browser.get(url)
-        # browser.implicitly_wait(3)
-        try:
-            browser.find_element("name", "username").send_keys(user)
-            break
-        except:
-            browser.quit()
-            continue
-
-    browser.find_element("name", "password").send_keys(password)
-    time.sleep(3)
-    browser.find_elements_by_xpath("//input[@class='W_btn_a btn_34px']")[0].click()
-    time.sleep(3)
-
-    html = browser.page_source
-    sel = etree.HTML(html)
-    while True:
-        cardcode = CardCode()
-        if browser.current_url != url:
-            break
-        captcha_url = sel.xpath("//img[@id='check_img']/@src")
-        b_image_name = new_screen(browser, captcha_url, image_name)
-        result = cardcode.__vaild__(b_image_name)
-        # result = input('验证码：')
-        browser.find_elements_by_xpath("//input[@id='door']")[0].clear()
-        browser.find_element("name", "door").send_keys(bytes.decode(result, 'gbk'))
-        # browser.find_element("name", "door").send_keys(result)
-        browser.find_elements_by_xpath("//input[@class='W_btn_a btn_34px']")[0].click()
-        time.sleep(2)
-        current_url = browser.current_url
-        if current_url == 'http://my.sina.com.cn/':
-            break
-        if current_url == 'http://i.blog.sina.com.cn/':
-            return True
-        html = browser.page_source
-        sel = etree.HTML(html)
-        check_result = sel.xpath("//span[@class='form_prompt']/i/text()")[0]
-        if check_result != '输入的验证码不正确':
-            break
-
-    browser.find_elements_by_xpath("//li[@class='l_pdt l_pdt1']/a/span")[0].click()
-    time.sleep(2)
-    # 获取打开的多个窗口句柄
-    windows = browser.window_handles
-    # 切换到当前最新打开的窗口
-    browser.switch_to.window(windows[-1])
-    # url = 'http://control.blog.sina.com.cn/myblog/htmlsource/blog_notopen.php?uid=' + name + '&version=7'
-    if browser.current_url == 'http://i.blog.sina.com.cn/':
-        cookies = browser.get_cookies()
-        for item in cookies:
-            if item.get('name') == 'SUB':
-                result = user + '----' + password + '----\n' + item.get('value') + '\n'
-                with open('cookies.txt', 'a') as f:
-                    f.write(result)
-                break
-        # print('cookies：', cookies)
-        time.sleep(2)
-        browser.quit()
-        return True
-
-    # browser.refresh()
     try:
-        html = browser.page_source
-        sel = etree.HTML(html)
-        check_user = sel.xpath("//p[@class ='notOpen_title']/strong/text()")[0]
-        if '很抱歉' in check_user:
+        while True:
+            global flag
+            if flag:
+                return False
+            ip = get_browser(user)
+            print('当前ip可用')
+            logging.info('当前ip可用')
+            print('进入程序')
+            logging.info('进入程序')
+            url = 'https://login.sina.com.cn/signup/signin.php'
+
+            chrome_options = Options()
+            # 在Linux需要禁用sandbox
+            chrome_options.add_argument('--no-sandbox')
+            # 谷歌文档提到需要加上这个属性来规避bug
+            # chrome_options.add_argument('--disable-gpu')
+            # 隐藏滚动条, 应对一些特殊页面
+            # chrome_options.add_argument('--hide-scrollbars')
+            # 不加载图片, 提升速度
+            # chrome_options.add_argument('blink-settings=imagesEnabled=false')
+            # https安全问题
+            # chrome_options.add_argument('--ignore-certificate-errors')
+            # chrome_options.add_argument('--headless')
+            # 添加代理
+            # ip = get_ip()
+            chrome_options.add_argument("--proxy-server=http://" + ip)
+            # 随机user_agent
+            user_agent = random.choice(constants.USER_AGENTS)
+            chrome_options.add_argument('user-agent=%s' % user_agent)
+            # logging.info("opening chrome, catalog_url:%s", catalog_url)
+
+            browser = webdriver.Chrome(chrome_options=chrome_options)
+            # browser.set_page_load_timeout(60)
+            browser.get(url)
+            browser.set_page_load_timeout(180)
+            browser.set_script_timeout(180)  # 这两种设置都进行才有效
+            try:
+                browser.find_element("name", "username").send_keys(user)
+                break
+            except:
+                browser.quit()
+                continue
+
+        browser.find_element("name", "password").send_keys(password)
+        time.sleep(3)
+        browser.find_elements_by_xpath("//input[@class='W_btn_a btn_34px']")[0].click()
+        time.sleep(3)
+        try:
+            html = browser.page_source
+            sel = etree.HTML(html)
+        except Exception as e:
+            print(e)
+            logging.error(e)
+
+        while True:
+            cardcode = CardCode()
+            if browser.current_url != url:
+                break
+            captcha_url = sel.xpath("//img[@id='check_img']/@src")
+            b_image_name = new_screen(browser, captcha_url, image_name)
+            result = cardcode.__vaild__(b_image_name)
+            # result = input('验证码：')
+            browser.find_elements_by_xpath("//input[@id='door']")[0].clear()
+            browser.find_element("name", "door").send_keys(bytes.decode(result, 'gbk'))
+            # browser.find_element("name", "door").send_keys(result)
+            browser.find_elements_by_xpath("//input[@class='W_btn_a btn_34px']")[0].click()
+            time.sleep(2)
+            current_url = browser.current_url
+            if current_url == 'http://my.sina.com.cn/':
+                break
+            if current_url == 'http://i.blog.sina.com.cn/':
+                return True
+            html = browser.page_source
+            sel = etree.HTML(html)
+            check_result = sel.xpath("//span[@class='form_prompt']/i/text()")[0]
+            if check_result != '输入的验证码不正确':
+                break
+
+        browser.find_elements_by_xpath("//li[@class='l_pdt l_pdt1']/a/span")[0].click()
+        time.sleep(2)
+        # 获取打开的多个窗口句柄
+        windows = browser.window_handles
+        # 切换到当前最新打开的窗口
+        browser.switch_to.window(windows[-1])
+        # url = 'http://control.blog.sina.com.cn/myblog/htmlsource/blog_notopen.php?uid=' + name + '&version=7'
+        if browser.current_url == 'http://i.blog.sina.com.cn/':
             cookies = browser.get_cookies()
             for item in cookies:
                 if item.get('name') == 'SUB':
@@ -316,56 +321,83 @@ def sendmessage(user, password, image_name):
             time.sleep(2)
             browser.quit()
             return True
-    except:
-        print('跳出异常')
-        pass
 
-    while True:
+        # browser.refresh()
         try:
-            print('进入手机号界面')
-            time.sleep(3)
-            phone = getphone()
-            browser.find_elements_by_xpath(
-                "//div[@class='focus open-blog-phone-border']/input | //div[@class='open-blog-phone-border']/input")[
-                0].clear()
-            browser.find_elements_by_xpath(
-                "//div[@class='focus open-blog-phone-border']/input | //div[@class='open-blog-phone-border']/input")[
-                0].send_keys(phone)
-            time.sleep(3)
             html = browser.page_source
             sel = etree.HTML(html)
-            error = sel.xpath("//p[@id='blogPhoneNumError']/text()")[0]
-            print(error)
-            if len(error) > 1 or error != '名称不能为空':
-                continue
+            check_user = sel.xpath("//p[@class ='notOpen_title']/strong/text()")[0]
+            if '很抱歉' in check_user:
+                cookies = browser.get_cookies()
+                for item in cookies:
+                    if item.get('name') == 'SUB':
+                        result = user + '----' + password + '----\n' + item.get('value') + '\n'
+                        with open('cookies.txt', 'a') as f:
+                            f.write(result)
+                        break
+                # print('cookies：', cookies)
+                time.sleep(2)
+                browser.quit()
+                return True
         except:
-            print(phone)
-            time.sleep(3)
-            html = browser.page_source
-            sel = etree.HTML(html)
-            messaging = sel.xpath("//div[@class='send-msg-tip']/p/text()")
-            if len(messaging) == 0:
-                continue
-            message_content = messaging[0].split('送')[1].split('到')[0]
-            addressee = messaging[0].split('到')[1].split('进')[0]
+            logging.info('跳出异常')
+            pass
 
-            print(message_content)
-            print(addressee)
+        while True:
+            try:
+                print('进入手机号界面')
+                logging.info('进入手机号界面')
+                time.sleep(3)
+                phone = getphone()
+                browser.find_elements_by_xpath(
+                    "//div[@class='focus open-blog-phone-border']/input | //div[@class='open-blog-phone-border']/input")[
+                    0].clear()
+                browser.find_elements_by_xpath(
+                    "//div[@class='focus open-blog-phone-border']/input | //div[@class='open-blog-phone-border']/input")[
+                    0].send_keys(phone)
+                time.sleep(3)
+                html = browser.page_source
+                sel = etree.HTML(html)
+                error = sel.xpath("//p[@id='blogPhoneNumError']/text()")[0]
+                print(error)
+                logging.info(error)
+                if len(error) > 1 or error != '名称不能为空':
+                    continue
+            except:
+                print(phone)
+                logging.info(phone)
+                time.sleep(3)
+                html = browser.page_source
+                sel = etree.HTML(html)
+                messaging = sel.xpath("//div[@class='send-msg-tip']/p/text()")
+                if len(messaging) == 0:
+                    continue
+                message_content = messaging[0].split('送')[1].split('到')[0]
+                addressee = messaging[0].split('到')[1].split('进')[0]
 
-            phone = putSentMessage(phone, message_content, addressee)
-            if phone == -1:
-                continue
-            flag = getSentMessageStatus(phone)
-            if flag:
-                browser.find_elements_by_xpath("//input[@id='blogPhoneNum']")[0].clear()
-                browser.find_elements_by_xpath("//input[@id='blogPhoneNum']")[0].send_keys(phone)
-            else:
-                break
-    browser.find_elements_by_xpath("//a[@class='btn']")[0].click()
-    time.sleep(2)
-    browser.quit()
-    time.sleep(3)
-    return True
+                print(message_content)
+                logging.info(message_content)
+                print(addressee)
+                logging.info(addressee)
+
+                phone = putSentMessage(phone, message_content, addressee)
+                if phone == -1:
+                    continue
+                flag = getSentMessageStatus(phone)
+                if flag:
+                    browser.find_elements_by_xpath("//input[@id='blogPhoneNum']")[0].clear()
+                    browser.find_elements_by_xpath("//input[@id='blogPhoneNum']")[0].send_keys(phone)
+                else:
+                    break
+        browser.find_elements_by_xpath("//a[@class='btn']")[0].click()
+        time.sleep(2)
+        browser.quit()
+        time.sleep(3)
+        return True
+    except Exception as e:
+        print(e)
+        logging.error(e)
+        return False
 
 class MyFrame(wx.Frame):
     def __init__(self, member_id):
@@ -420,6 +452,7 @@ class MyFrame(wx.Frame):
         global flag
         flag = True
         print(flag)
+        logging.info('flag：%s' % flag)
         if flag:
             dlg = wx.MessageDialog(None, "停止成功，将运行完该次账户后终止程序", u"提示")
             dlg.ShowModal()
@@ -437,10 +470,12 @@ class MyFrame(wx.Frame):
             content = data_time + '\n' + '成功帐号信息：' + '\n' + success_result + '\n' + '失败帐号信息：' + '\n' + failed_result
             f.write(content)
         dlg = wx.MessageDialog(None, "导出成功，此次文件名为："+file_name, u"信息")
+        logging.info("导出成功，此次文件名为：%s" % file_name)
         dlg.ShowModal()
 
 
     def openfile(self, event):  # 定义打开文件事件
+        logging.info('打开文件')
         dlg = wx.FileDialog(self, u"选择文件", style=wx.DD_DEFAULT_STYLE)
         if dlg.ShowModal() == wx.ID_OK:
             self.path_text.SetValue(dlg.GetPath())
@@ -449,68 +484,79 @@ class MyFrame(wx.Frame):
                 self.content_text.SetValue(f.read())
 
     def save_blog(self, event):
-        db = connect_db()
-        info = self.content_text.GetValue().split('\n')
-        count = 0
-        repeat_list = ''
-        for item in info:
-            print(item.replace('卡号：', ''))
-            result = item.replace('卡号：', '').split('----')
-            if len(result) == 3:
-                conn = db.cursor()  # 获取指针以操作数据库
-                user = result[0]
-                sql = 'SELECT user FROM blog where user=%s' % user
-                conn.execute(sql)
-                repeat_result = conn.fetchone()
-                if repeat_result:
-                    repeat_list += item + '\n'
-                    continue
-                password = result[1]
-                name = result[2]
-                status = 0
-                t = [user, password, name, status, self.member_id]
-                sql = u"INSERT INTO blog(user,password,name,status, member_id) VALUES (%s,%s,%s,%s,%s)"
-                conn.execute(sql, t)
-                db.commit()  # 提交操作
-                count += 1
-        db.close()
-
+        try:
+            db = connect_db()
+            info = self.content_text.GetValue().split('\n')
+            count = 0
+            repeat_list = ''
+            logging.info('插入数据')
+            for item in info:
+                print(item.replace('卡号：', ''))
+                logging.info(item.replace('卡号：', ''))
+                result = item.replace('卡号：', '').split('----')
+                if len(result) == 3:
+                    conn = db.cursor()  # 获取指针以操作数据库
+                    user = result[0]
+                    sql = 'SELECT user FROM blog where user=%s' % user
+                    conn.execute(sql)
+                    repeat_result = conn.fetchone()
+                    if repeat_result:
+                        repeat_list += item + '\n'
+                        continue
+                    password = result[1]
+                    name = result[2]
+                    status = 0
+                    t = [user, password, name, status, self.member_id]
+                    sql = u"INSERT INTO blog(user,password,name,status, member_id) VALUES (%s,%s,%s,%s,%s)"
+                    conn.execute(sql, t)
+                    db.commit()  # 提交操作
+                    count += 1
+            db.close()
+            self.repeat.SetValue(repeat_list)
+            dlg = wx.MessageDialog(None, "成功插入数据：" + str(count), u"提示")
+            logging.info("成功插入数据：%s" % str(count))
+            dlg.ShowModal()
+        except Exception as e:
+            logging.error(e)
+            dlg = wx.MessageDialog(None, "插入数据失败，数据格式有误", u"提示")
+            dlg.ShowModal()
         # print(count)
-        self.repeat.SetValue(repeat_list)
-        dlg = wx.MessageDialog(None, "成功插入数据："+str(count), u"信息")
-        dlg.ShowModal()
+
 
     def search_data(self, event):
-        db = connect_db()
-        conn = db.cursor()  # 获取指针以操作数据库
-        sql = 'SELECT * FROM blog where status=0 and member_id=%d' % self.member_id
-        conn.execute(sql)
-        todo_result = conn.fetchall()
-        wx.StaticText(wx.Panel(self), -1, '数据库中待注册账户数量：' + str(len(todo_result)), (130, 425))
-        sql = 'SELECT * FROM blog where status=1 and member_id=%d' % self.member_id
-        conn.execute(sql)
-        success_result = conn.fetchall()
-        if len(success_result) == 0:
-            self.db_failed_text.SetValue('暂无')
-        else:
-            success_result_list = ''
-            for item in success_result:
-                info = str(item[0]) + '----' + str(item[1]) + '----' + str(item[2])
-                success_result_list += info + '\n'
-            self.db_success_text.SetValue(success_result_list)
-        sql = 'SELECT * FROM blog where status=-1 and member_id=%d' % self.member_id
-        conn.execute(sql)
-        failed_result = conn.fetchall()
-        db.close()
-        if len(failed_result) == 0:
-            self.db_failed_text.SetValue('暂无')
-        else:
-            failed_result_list = ''
-            for item in failed_result:
-                info = str(item[0]) + '----' + str(item[1]) + '----' + str(item[2])
-                failed_result_list += info + '\n'
-            self.db_failed_text.SetValue(failed_result_list)
-
+        try:
+            logging.info('查询数据库结果')
+            db = connect_db()
+            conn = db.cursor()  # 获取指针以操作数据库
+            sql = 'SELECT * FROM blog where status=0 and member_id=%d' % self.member_id
+            conn.execute(sql)
+            todo_result = conn.fetchall()
+            wx.StaticText(wx.Panel(self), -1, '数据库中待注册账户数量：' + str(len(todo_result)), (130, 425))
+            sql = 'SELECT * FROM blog where status=1 and member_id=%d' % self.member_id
+            conn.execute(sql)
+            success_result = conn.fetchall()
+            if len(success_result) == 0:
+                self.db_failed_text.SetValue('暂无')
+            else:
+                success_result_list = ''
+                for item in success_result:
+                    info = str(item[0]) + '----' + str(item[1]) + '----' + str(item[2])
+                    success_result_list += info + '\n'
+                self.db_success_text.SetValue(success_result_list)
+            sql = 'SELECT * FROM blog where status=-1 and member_id=%d' % self.member_id
+            conn.execute(sql)
+            failed_result = conn.fetchall()
+            db.close()
+            if len(failed_result) == 0:
+                self.db_failed_text.SetValue('暂无')
+            else:
+                failed_result_list = ''
+                for item in failed_result:
+                    info = str(item[0]) + '----' + str(item[1]) + '----' + str(item[2])
+                    failed_result_list += info + '\n'
+                self.db_failed_text.SetValue(failed_result_list)
+        except Exception as e:
+            logging.error(e)
     # def open_asyncio(self, event):
     #     now = lambda: time.time()
     #     start = now()
@@ -530,6 +576,7 @@ class MyFrame(wx.Frame):
     #     print("callback:", future.result())
 
     def open_thread(self, event):
+        logging.info('运行未注册数据')
         global flag
         flag = False
         use_times = self.start_count.GetValue()
@@ -559,6 +606,7 @@ class MyFrame(wx.Frame):
 
         if len(blog_list) == 0:
             dlg = wx.MessageDialog(None, "数据库暂无可注册账户信息，请添加", u"提示")
+            logging.error('数据库暂无可注册账户信息，请添加')
             dlg.ShowModal()
             return
 
@@ -571,6 +619,7 @@ class MyFrame(wx.Frame):
         time.sleep(3)
 
     def open_failed_thread(self, event):
+        logging.info('运行失败数据')
         global flag
         flag = False
         use_times = self.start_count.GetValue()
@@ -582,6 +631,7 @@ class MyFrame(wx.Frame):
             dlg = wx.MessageDialog(None, "请将线程数控制在10以内", u"提示")
             dlg.ShowModal()
             return
+        logging.info('开启线程数为：%s' % str(use_times))
         db = connect_db()
         conn = db.cursor()  # 获取指针以操作数据库
         sql = 'SELECT user,password,name  FROM blog WHERE status=-1 and member_id=%d ORDER BY id' % self.member_id
@@ -591,6 +641,7 @@ class MyFrame(wx.Frame):
 
         if len(blog_list) == 0:
             dlg = wx.MessageDialog(None, "数据库暂无失败数据", u"提示")
+            logging.error('数据库暂无失败数据')
             dlg.ShowModal()
             return
 
@@ -605,22 +656,3 @@ if __name__ == '__main__':
     frame = MyFrame()
     frame.Show()
     app.MainLoop()
-
-#
-# 　　　┏┓　　　┏┓
-# 　　┏┛┻━━━┛┻┓
-# 　　┃　　　　　　　 ┃
-# 　　┃　　　━　　　 ┃
-# 　　┃　┳┛　┗┳　┃
-# 　　┃　　　　　　　 ┃
-# 　　┃　　　┻　　　 ┃
-# 　　┃　　　　　　　 ┃
-# 　　┗━┓　　　┏━┛Codes are far away from bugs with the animal protecting
-# 　　　　┃　　　┃    神兽保佑,代码无bug
-# 　　　　┃　　　┃
-# 　　　　┃　　　┗━━━┓
-# 　　　　┃　　　　　 ┣┓
-# 　　　　┃　　　　 ┏┛
-# 　　　　┗┓┓┏━┳┓┏┛
-# 　　　　　┃┫┫　┃┫┫
-# 　　　　　┗┻┛　┗┻┛

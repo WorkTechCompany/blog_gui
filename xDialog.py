@@ -1,6 +1,7 @@
 # -*- coding:utf-8 -*-
 import wx
 from gui import connect_db
+import logging
 
 class InputDialog(wx.Dialog):
     def __init__(self, title, func_callBack, themeColor):
@@ -53,16 +54,19 @@ class InputDialog(wx.Dialog):
         conn.execute(sql)
         member_info = conn.fetchone()
         if member_info == None:
+            logging.error('用户名不存在，接收用户名为：%s' % account)
             dlg = wx.MessageDialog(None, "用户名不存在，请联系管理员添加账户", u"提示")
             dlg.ShowModal()
         else:
             if member_info[2] == password:
                 flag = True
             else:
+                logging.error('密码错误，接收到的用户名与密码为：%s, %s' % (account, password))
                 dlg = wx.MessageDialog(None, "用户名或密码错误", u"提示")
                 dlg.ShowModal()
 
         if flag:
+            logging.info('登录成功，登录用户为：%s' % account)
             dlg = wx.MessageDialog(None, "登录成功", u"提示")
             dlg.ShowModal()
 
