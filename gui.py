@@ -310,39 +310,20 @@ def sendmessage(user, password, image_name):
         browser.switch_to.window(windows[-1])
         # url = 'http://control.blog.sina.com.cn/myblog/htmlsource/blog_notopen.php?uid=' + name + '&version=7'
         if browser.current_url == 'http://i.blog.sina.com.cn/':
-            cookies = browser.get_cookies()
-            for item in cookies:
-                if item.get('name') == 'SUB':
-                    result = user + '----' + password + '----\n' + item.get('value') + '\n'
-                    with open('cookies.txt', 'a') as f:
-                        f.write(result)
-                    break
-            # print('cookies：', cookies)
             time.sleep(2)
             browser.quit()
             return True
-
-        # browser.refresh()
         try:
             html = browser.page_source
             sel = etree.HTML(html)
             check_user = sel.xpath("//p[@class ='notOpen_title']/strong/text()")[0]
             if '很抱歉' in check_user:
-                cookies = browser.get_cookies()
-                for item in cookies:
-                    if item.get('name') == 'SUB':
-                        result = user + '----' + password + '----\n' + item.get('value') + '\n'
-                        with open('cookies.txt', 'a') as f:
-                            f.write(result)
-                        break
-                # print('cookies：', cookies)
                 time.sleep(2)
                 browser.quit()
                 return True
         except:
             logging.info('跳出异常')
             pass
-
         while True:
             try:
                 print('进入手机号界面')
@@ -391,6 +372,20 @@ def sendmessage(user, password, image_name):
                     break
         browser.find_elements_by_xpath("//a[@class='btn']")[0].click()
         time.sleep(2)
+        db = connect_db()
+        conn = db.cursor()  # 获取指针以操作数据库
+        try:
+            cookies = browser.get_cookies()
+            for item in cookies:
+                if item.get('name') == 'SUB':
+                    result = 'SUB=' + item.get('value')
+                    sql = 'UPDATE blog set cookies=%s where user=%s' % (result, user)
+                    conn.execute(sql)
+                    break
+        except:
+            db.rollback()
+        finally:
+            db.close()
         browser.quit()
         time.sleep(3)
         return True
@@ -436,17 +431,56 @@ class MyFrame(wx.Frame):
         self.start_button = wx.Button(frame, label="运行失败数据", pos=(680, 30), size=(150, 24))
         self.start_button.Bind(wx.EVT_BUTTON, self.open_failed_thread)
 
+        self.start_button = wx.Button(frame, label="清空数据库数据", pos=(680, 55), size=(150, 24))
+        self.start_button.Bind(wx.EVT_BUTTON, self.clear_db)
+
         self.stop_button = wx.Button(frame, label="停止", pos=(880, 5), size=(70, 24))
         self.stop_button.Bind(wx.EVT_BUTTON, self.stop)
 
         self.export_button = wx.Button(frame, label="导出", pos=(880, 30), size=(70, 24))
         self.export_button.Bind(wx.EVT_BUTTON, self.export)
 
+        self.export_button = wx.Button(frame, label="导出cookies", pos=(880, 55), size=(90, 24))
+        self.export_button.Bind(wx.EVT_BUTTON, self.export_cookies)
+
 
         wx.StaticText(frame, -1, "成功账户信息", (500, 50))
         self.success_info = wx.TextCtrl(frame, pos=(500, 100), size=(475, 300), style=wx.TE_MULTILINE)
         wx.StaticText(frame, -1, "失败账户信息", (500, 430))
         self.failed_info = wx.TextCtrl(frame, pos=(500, 450), size=(475, 300), style=wx.TE_MULTILINE)
+
+    def export_cookies(self, event): # 导出成功数据的cookies
+        db = connect_db()
+        conn = db.cursor()  # 获取指针以操作数据库
+        sql = 'SELECT cookies FROM blog where status=1 and member_id=%d' % self.member_id
+        conn.execute(sql)
+        cookies_result = conn.fetchall()
+        file_name = '_cookies' + str(int(time.time())) + '.txt'
+        with open(file_name, 'w', encoding="utf-8") as f:
+            for item in cookies_result:
+                if item[0] == None:
+                    continue
+                f.write(item[0] + '\n')
+        dlg = wx.MessageDialog(None, "导出成功，此次文件名为："+ file_name, u"信息")
+        logging.info("导出成功，此次文件名为：%s" % file_name)
+        dlg.ShowModal()
+
+    def clear_db(self, event): # 清空数据库数据
+        dlg = wx.MessageDialog(None, u"确认是否清空数据库？", u"提示", wx.YES_NO | wx.ICON_QUESTION)
+        if dlg.ShowModal() == wx.ID_YES:
+            logging.info('清空数据库数据')
+            db = connect_db()
+            conn = db.cursor()  # 获取指针以操作数据库
+            try:
+                sql = 'Delete FROM blog WHERE smember_id=%d' % self.member_id
+                conn.execute(sql)
+            except:
+                logging.error('清空失败，数据回滚')
+                db.rollback()
+            finally:
+                db.close()
+        dlg.Destroy()
+
 
     def stop(self, event): # 修改flag状态
         global flag
@@ -497,6 +531,9 @@ class MyFrame(wx.Frame):
                 if len(result) == 3:
                     conn = db.cursor()  # 获取指针以操作数据库
                     user = result[0]
+                    print(type(user))
+                    print(user)
+                    logging.info('查询重复数据')
                     sql = 'SELECT user FROM blog where user=%s' % user
                     conn.execute(sql)
                     repeat_result = conn.fetchone()
@@ -507,7 +544,8 @@ class MyFrame(wx.Frame):
                     name = result[2]
                     status = 0
                     t = [user, password, name, status, self.member_id]
-                    sql = u"INSERT INTO blog(user,password,name,status, member_id) VALUES (%s,%s,%s,%s,%s)"
+                    logging.info('插入数据')
+                    sql = "INSERT INTO blog(user,password,name,status, member_id) VALUES (%s,%s,%s,%s,%s)"
                     conn.execute(sql, t)
                     db.commit()  # 提交操作
                     count += 1
@@ -557,23 +595,6 @@ class MyFrame(wx.Frame):
                 self.db_failed_text.SetValue(failed_result_list)
         except Exception as e:
             logging.error(e)
-    # def open_asyncio(self, event):
-    #     now = lambda: time.time()
-    #     start = now()
-    #     coroutine = self.open_thread()
-    #     # 创建一个事件loop
-    #     loop = asyncio.get_event_loop()
-    #     # 创建一个task
-    #     task = asyncio.ensure_future(coroutine)
-    #     print(task)
-    #     # 增加一个回调函数
-    #     task.add_done_callback(self.callback)
-    #     print(task)
-    #     loop.run_until_complete(task)
-    #     print("Time:", now() - start)
-    #
-    # def callback(self, future):
-    #     print("callback:", future.result())
 
     def open_thread(self, event):
         logging.info('运行未注册数据')
