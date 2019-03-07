@@ -33,11 +33,16 @@ success_user_list = ''
 failed_user_list = ''
 
 def connect_db():
-    db = pymysql.connect(host='cd-cdb-nmj4h99o.sql.tencentcdb.com', user='bryant', password='leekobe24', db='blog',
-                         port=63625, charset='utf8')
-    logging.info('连接数据库成功！')
-    print('连接数据库成功！')
-    return db
+    try:
+        db = pymysql.connect(host='cd-cdb-nmj4h99o.sql.tencentcdb.com', user='bryant', password='leekobe24', db='blog',
+                             port=63625, charset='utf8')
+        logging.info('连接数据库成功！')
+        print('连接数据库成功！')
+        return db
+    except:
+        dlg = wx.MessageDialog(None, "数据库连接失败，请查询ip后联系管理员", u"提示")
+        dlg.ShowModal()
+
 
 def open_start_thread(success_info, failed_info, member_id, use_times, status=1):
     executor = ThreadPoolExecutor(max_workers=int(use_times))
@@ -113,6 +118,9 @@ def getphone():
         if '余额不足' in response:
             url = 'http://huoyun888.cn/api/do.php?action=cancelAllRecv&token=903e64acc9b2a43985353bc2e0809c9c&sid=11818phoneType=CMCC'
             requests.get(url)
+            response_2 = requests.get(phone_url).text
+            if '余额不足' in response_2:
+                return False
         else:
             phone = response.split('|')[1]
             return phone
@@ -151,16 +159,25 @@ def getSentMessageStatus(phone):
             return flag
 
 def get_ip():
-    url = 'http://dps.kdlapi.com/api/getdps/?orderid=994885572240867&num=1&pt=1&ut=2&format=json&sep=1'
+    # while True:
+    #     url = 'http://s.zdaye.com/?api=201903012041267786&count=1&px=2'
+    #     ip = requests.get(url).text
+    #     if '请求过快' in ip:
+    #         time.sleep(10)
+    #     else:
+    #         print(ip)
+    #         return ip
+    url = 'http://dps.kdlapi.com/api/getdps/?orderid=935142331253482&num=1&pt=1&format=json&sep=1'
     ip_list = json.loads(requests.get(url).text).get('data').get('proxy_list')
     ip = random.choice(ip_list)
     return ip
+
 
 def get_browser(user):
     while True:
         print('获取ip')
         logging.info('获取ip')
-        url = 'https://login.sina.com.cn/signup/signin.php'
+        url = 'http://blog.sina.com.cn/'
 
         chrome_options = Options()
         # 在Linux需要禁用sandbox
@@ -168,9 +185,9 @@ def get_browser(user):
         # 谷歌文档提到需要加上这个属性来规避bug
         # chrome_options.add_argument('--disable-gpu')
         # 隐藏滚动条, 应对一些特殊页面
-        # chrome_options.add_argument('--hide-scrollbars')
+        chrome_options.add_argument('--hide-scrollbars')
         # 不加载图片, 提升速度
-        # chrome_options.add_argument('blink-settings=imagesEnabled=false')
+        chrome_options.add_argument('blink-settings=imagesEnabled=false')
         # https安全问题
         chrome_options.add_argument('--ignore-certificate-errors')
         # chrome_options.add_argument('--headless')
@@ -183,11 +200,11 @@ def get_browser(user):
         # logging.info("opening chrome, catalog_url:%s", catalog_url)
 
         browser = webdriver.Chrome(chrome_options=chrome_options)
+        browser.set_page_load_timeout(5)
         try:
             browser.get(url)
-            browser.set_page_load_timeout(5)
             time.sleep(2)
-            browser.find_element("name", "username").send_keys(user)
+            browser.find_element("id", "loginName").send_keys(user)
             browser.quit()
             return ip
         except:
@@ -210,7 +227,8 @@ def new_screen(browser, captcha_url, image_name):
             check_screen = handle
     # 输出当前窗口句柄（搜狗）
     browser.switch_to.window(check_screen)
-    check_image = 'D:\\' + str(image_name) + '.png'
+    check_image = 'E:\\' + str(image_name) + '.png'
+    # check_image = str(image_name) + '.png'
     browser.get_screenshot_as_file(check_image)
     img = Image.open(check_image)
     img = img.crop([img.size[0]/4,img.size[1]/4,img.size[0]*3/4,img.size[1]*3/4])
@@ -223,113 +241,159 @@ def new_screen(browser, captcha_url, image_name):
     return bytes(check_image, encoding="utf8")
 
 def sendmessage(user, password, image_name):
+    while True:
+        global flag
+        if flag:
+            return False
+        ip = get_browser(user)
+        print('当前ip可用')
+        logging.info('当前ip可用')
+        print('进入程序')
+        logging.info('进入程序')
+        url = 'http://blog.sina.com.cn/'
+
+        chrome_options = Options()
+        # 在Linux需要禁用sandbox
+        chrome_options.add_argument('--no-sandbox')
+        # 谷歌文档提到需要加上这个属性来规避bug
+        # chrome_options.add_argument('--disable-gpu')
+        # 隐藏滚动条, 应对一些特殊页面
+        # chrome_options.add_argument('--hide-scrollbars')
+        # 不加载图片, 提升速度
+        # chrome_options.add_argument('blink-settings=imagesEnabled=false')
+        # https安全问题
+        chrome_options.add_argument('--ignore-certificate-errors')
+        # chrome_options.add_argument('--headless')
+        chrome_options.add_argument("--proxy-server=http://" + ip)
+        # 随机user_agent
+        user_agent = random.choice(constants.USER_AGENTS)
+        chrome_options.add_argument('user-agent=%s' % user_agent)
+        # logging.info("opening chrome, catalog_url:%s", catalog_url)
+
+        browser = webdriver.Chrome(chrome_options=chrome_options)
+        # browser.set_page_load_timeout(60)
+        browser.set_page_load_timeout(180)
+        browser.set_script_timeout(180)  # 这两种设置都进行才有效
+        try:
+            browser.get(url)
+        except Exception as e:
+            browser.quit()
+            logging.error(e)
+            print(e)
+            return False
+
+        try:
+            browser.find_element("id", "loginName").send_keys(user)
+            break
+        except:
+            browser.quit()
+            continue
+
+    # try:
+    #     browser.find_element("id", "loginPassword").send_keys(password)
+    #     time.sleep(3)
+    #     browser.find_elements_by_xpath("//div[@class='jfl']/a")[0].click()
+    #     time.sleep(3)
+    #     html = browser.page_source
+    #     sel = etree.HTML(html)
+    # except Exception as e:
+    #     browser.quit()
+    #     logging.error(e)
+    #     print(e)
+    #     return False
+
     try:
         while True:
-            global flag
-            if flag:
-                return False
-            ip = get_browser(user)
-            print('当前ip可用')
-            logging.info('当前ip可用')
-            print('进入程序')
-            logging.info('进入程序')
-            url = 'https://login.sina.com.cn/signup/signin.php'
-
-            chrome_options = Options()
-            # 在Linux需要禁用sandbox
-            chrome_options.add_argument('--no-sandbox')
-            # 谷歌文档提到需要加上这个属性来规避bug
-            # chrome_options.add_argument('--disable-gpu')
-            # 隐藏滚动条, 应对一些特殊页面
-            # chrome_options.add_argument('--hide-scrollbars')
-            # 不加载图片, 提升速度
-            # chrome_options.add_argument('blink-settings=imagesEnabled=false')
-            # https安全问题
-            # chrome_options.add_argument('--ignore-certificate-errors')
-            # chrome_options.add_argument('--headless')
-            # 添加代理
-            # ip = get_ip()
-            chrome_options.add_argument("--proxy-server=http://" + ip)
-            # 随机user_agent
-            user_agent = random.choice(constants.USER_AGENTS)
-            chrome_options.add_argument('user-agent=%s' % user_agent)
-            # logging.info("opening chrome, catalog_url:%s", catalog_url)
-
-            browser = webdriver.Chrome(chrome_options=chrome_options)
-            # browser.set_page_load_timeout(60)
-            browser.get(url)
-            browser.set_page_load_timeout(180)
-            browser.set_script_timeout(180)  # 这两种设置都进行才有效
-            try:
-                browser.find_element("name", "username").send_keys(user)
-                break
-            except:
-                browser.quit()
-                continue
-
-        browser.find_element("name", "password").send_keys(password)
-        time.sleep(3)
-        browser.find_elements_by_xpath("//input[@class='W_btn_a btn_34px']")[0].click()
-        time.sleep(3)
-        try:
             html = browser.page_source
             sel = etree.HTML(html)
-        except Exception as e:
-            print(e)
-            logging.error(e)
-
-        while True:
+            not_login = sel.xpath("//div[@class='logined-user-info']/a[@class='logined-name']")
+            if len(not_login) != 0:
+                break
+            try:
+                browser.find_element("id", "loginName").clear()
+                browser.find_element("id", "loginName").send_keys(user)
+                browser.find_element("id", "loginPassword").send_keys(password)
+                time.sleep(3)
+                browser.find_elements_by_xpath("//div[@class='jfl']/a")[0].click()
+                time.sleep(3)
+                html = browser.page_source
+                sel = etree.HTML(html)
+            except Exception as e:
+                browser.quit()
+                logging.error(e)
+                print(e)
+                return False
             cardcode = CardCode()
             if browser.current_url != url:
                 break
-            captcha_url = sel.xpath("//img[@id='check_img']/@src")
+            captcha_url = sel.xpath("//img[@id='pin-img']/@src")
             b_image_name = new_screen(browser, captcha_url, image_name)
             result = cardcode.__vaild__(b_image_name)
             # result = input('验证码：')
-            browser.find_elements_by_xpath("//input[@id='door']")[0].clear()
-            browser.find_element("name", "door").send_keys(bytes.decode(result, 'gbk'))
-            # browser.find_element("name", "door").send_keys(result)
-            browser.find_elements_by_xpath("//input[@class='W_btn_a btn_34px']")[0].click()
+            browser.find_elements_by_xpath("//div[@class='content']/p/span/span/input")[0].clear()
+            browser.find_elements_by_xpath("//div[@class='content']/p/span/span/input")[0].send_keys(bytes.decode(result, 'gbk'))
             time.sleep(2)
-            current_url = browser.current_url
-            if current_url == 'http://my.sina.com.cn/':
-                break
-            if current_url == 'http://i.blog.sina.com.cn/':
-                return True
-            html = browser.page_source
-            sel = etree.HTML(html)
-            check_result = sel.xpath("//span[@class='form_prompt']/i/text()")[0]
-            if check_result != '输入的验证码不正确':
-                break
+            browser.find_elements_by_xpath("//div[@class='msg-pop-footer']/a[@class='msg-pop-sure']")[0].click()
+            time.sleep(3)
+            # current_url = browser.current_url
+            # if current_url == 'http://my.sina.com.cn/':
+            #     break
+            # if current_url == 'http://i.blog.sina.com.cn/':
+            #     return True
+            # html = browser.page_source
+            # sel = etree.HTML(html)
+            # check_result = sel.xpath("//span[@class='pin-error-text']/text()")
+            # if len(check_result) == 0:
+            #     break
+            browser.refresh()
+    except Exception as e:
+        browser.quit()
+        logging.error(e)
+        print(e)
+        return False
 
-        browser.find_elements_by_xpath("//li[@class='l_pdt l_pdt1']/a/span")[0].click()
-        time.sleep(2)
-        # 获取打开的多个窗口句柄
-        windows = browser.window_handles
-        # 切换到当前最新打开的窗口
-        browser.switch_to.window(windows[-1])
-        # url = 'http://control.blog.sina.com.cn/myblog/htmlsource/blog_notopen.php?uid=' + name + '&version=7'
-        if browser.current_url == 'http://i.blog.sina.com.cn/':
+    # browser.refresh()
+    time.sleep(3)
+    phone_url = 'http://i.blog.sina.com.cn/'
+    js = 'window.open("' + phone_url + '");'
+    browser.execute_script(js)
+    blog_screen = browser.current_window_handle
+    handles = browser.window_handles
+    check_screen = None
+    for handle in handles:
+        if handle != blog_screen:
+            check_screen = handle
+    # 输出当前窗口句柄（搜狗）
+    browser.switch_to.window(check_screen)
+    # print(browser.find_elements_by_xpath("//a[@class='write-blog']"))
+    # browser.find_elements_by_xpath("//a[@class='write-blog']")[0].clear()
+    # if browser.current_url == 'http://i.blog.sina.com.cn/':
+    #     time.sleep(2)
+    #     browser.quit()
+    #     return True
+    time.sleep(3)
+    try:
+        html = browser.page_source
+        sel = etree.HTML(html)
+        check_user = sel.xpath("//p[@class ='notOpen_title']/strong/text()")[0]
+        if '很抱歉' in check_user:
             time.sleep(2)
             browser.quit()
             return True
-        try:
-            html = browser.page_source
-            sel = etree.HTML(html)
-            check_user = sel.xpath("//p[@class ='notOpen_title']/strong/text()")[0]
-            if '很抱歉' in check_user:
-                time.sleep(2)
-                browser.quit()
-                return True
-        except:
-            logging.info('跳出异常')
-            pass
+    except:
+        logging.info('跳出异常')
+        pass
+
+    try:
         while True:
             try:
                 print('进入手机号界面')
                 logging.info('进入手机号界面')
                 time.sleep(3)
                 phone = getphone()
+                if phone == False:
+                    logging.info('手机号没钱了')
+                    return False
                 browser.find_elements_by_xpath(
                     "//div[@class='focus open-blog-phone-border']/input | //div[@class='open-blog-phone-border']/input")[
                     0].clear()
@@ -370,29 +434,44 @@ def sendmessage(user, password, image_name):
                     browser.find_elements_by_xpath("//input[@id='blogPhoneNum']")[0].send_keys(phone)
                 else:
                     break
-        browser.find_elements_by_xpath("//a[@class='btn']")[0].click()
-        time.sleep(2)
-        db = connect_db()
-        conn = db.cursor()  # 获取指针以操作数据库
-        try:
-            cookies = browser.get_cookies()
-            for item in cookies:
-                if item.get('name') == 'SUB':
-                    result = 'SUB=' + item.get('value')
-                    sql = 'UPDATE blog set cookies=%s where user=%s' % (result, user)
-                    conn.execute(sql)
-                    break
-        except:
-            db.rollback()
-        finally:
-            db.close()
-        browser.quit()
-        time.sleep(3)
-        return True
     except Exception as e:
-        print(e)
+        browser.quit()
         logging.error(e)
+        print(e)
         return False
+
+    db = connect_db()
+    conn = db.cursor()  # 获取指针以操作数据库
+
+    try:
+        logging.info('存储cookie')
+        cookies = browser.get_cookies()
+        for item in cookies:
+            if item.get('name') == 'SUB':
+                result = 'SUB=' + item.get('value')
+                sql = "UPDATE blog set cookies='%s' where user='%s'" % (result, user)
+                conn.execute(sql)
+                db.commit()
+                break
+    except Exception as e:
+        logging.error('存储失败')
+        db.rollback()
+        browser.quit()
+        logging.error(e)
+        print(e)
+        db.close()
+        return False
+    try:
+        time.sleep(3)
+        browser.find_elements_by_xpath("//a[@class='btn']")[0].click()
+    except Exception as e:
+        logging.error(e)
+        print(e)
+        return False
+    time.sleep(2)
+    browser.quit()
+    time.sleep(3)
+    return True
 
 class MyFrame(wx.Frame):
     def __init__(self, member_id):
@@ -460,7 +539,7 @@ class MyFrame(wx.Frame):
             for item in cookies_result:
                 if item[0] == None:
                     continue
-                f.write(item[0] + '\n')
+                f.write(item[0] + ';\n')
         dlg = wx.MessageDialog(None, "导出成功，此次文件名为："+ file_name, u"信息")
         logging.info("导出成功，此次文件名为：%s" % file_name)
         dlg.ShowModal()
@@ -472,8 +551,9 @@ class MyFrame(wx.Frame):
             db = connect_db()
             conn = db.cursor()  # 获取指针以操作数据库
             try:
-                sql = 'Delete FROM blog WHERE smember_id=%d' % self.member_id
+                sql = 'Delete FROM blog WHERE member_id=%d' % self.member_id
                 conn.execute(sql)
+                db.commit()
             except:
                 logging.error('清空失败，数据回滚')
                 db.rollback()
@@ -574,7 +654,7 @@ class MyFrame(wx.Frame):
             conn.execute(sql)
             success_result = conn.fetchall()
             if len(success_result) == 0:
-                self.db_failed_text.SetValue('暂无')
+                self.db_success_text.SetValue('暂无')
             else:
                 success_result_list = ''
                 for item in success_result:
@@ -652,6 +732,8 @@ class MyFrame(wx.Frame):
             dlg = wx.MessageDialog(None, "请将线程数控制在10以内", u"提示")
             dlg.ShowModal()
             return
+
+
         logging.info('开启线程数为：%s' % str(use_times))
         db = connect_db()
         conn = db.cursor()  # 获取指针以操作数据库
